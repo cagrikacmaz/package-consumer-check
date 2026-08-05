@@ -25,9 +25,6 @@ Node.js 20 or newer and npm are required.
 npm install --save-dev package-consumer-check
 ```
 
-The package is not published during its initial repository development. Until an npm release exists,
-install from a trusted local tarball or repository checkout.
-
 ## Quick start
 
 Build your package first, then check it:
