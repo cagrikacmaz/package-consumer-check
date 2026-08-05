@@ -1,0 +1,10 @@
+{
+  "name": "fixture-cli-failing",
+  "version": "1.0.0",
+  "main": "./index.cjs",
+  "bin": "./cli.cjs",
+  "files": [
+    "index.cjs",
+    "cli.cjs"
+  ]
+}

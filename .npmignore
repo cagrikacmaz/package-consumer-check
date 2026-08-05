@@ -1,0 +1,10 @@
+src/
+tests/
+.github/
+coverage/
+*.config.*
+tsconfig.json
+CONTRIBUTING.md
+SECURITY.md
+CODE_OF_CONDUCT.md
+scripts/

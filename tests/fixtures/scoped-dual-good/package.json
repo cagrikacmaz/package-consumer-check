@@ -1,0 +1,16 @@
+{
+  "name": "@consumer-check/fixture-scoped-dual",
+  "version": "2.0.0",
+  "type": "module",
+  "main": "./index.cjs",
+  "exports": {
+    ".": {
+      "import": "./index.js",
+      "require": "./index.cjs"
+    }
+  },
+  "files": [
+    "index.js",
+    "index.cjs"
+  ]
+}

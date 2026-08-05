@@ -1,0 +1,14 @@
+{
+  "name": "fixture-multiple-bins",
+  "version": "1.0.0",
+  "main": "./index.cjs",
+  "bin": {
+    "first-bin": "./first.js",
+    "second-bin": "./second.cjs"
+  },
+  "files": [
+    "index.cjs",
+    "first.js",
+    "second.cjs"
+  ]
+}

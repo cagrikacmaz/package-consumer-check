@@ -1,0 +1,11 @@
+{
+  "name": "fixture-missing-bin-file",
+  "version": "1.0.0",
+  "main": "./index.cjs",
+  "bin": {
+    "missing-bin": "./missing.js"
+  },
+  "files": [
+    "index.cjs"
+  ]
+}

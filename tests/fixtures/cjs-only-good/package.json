@@ -1,0 +1,13 @@
+{
+  "name": "fixture-cjs-only-good",
+  "version": "1.0.0",
+  "main": "./index.cjs",
+  "exports": {
+    ".": {
+      "require": "./index.cjs"
+    }
+  },
+  "files": [
+    "index.cjs"
+  ]
+}

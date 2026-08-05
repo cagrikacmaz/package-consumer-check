@@ -1,0 +1,13 @@
+{
+  "name": "fixture-missing-export-file",
+  "version": "1.0.0",
+  "type": "module",
+  "exports": {
+    ".": {
+      "import": "./not-packed.js"
+    }
+  },
+  "files": [
+    "placeholder.txt"
+  ]
+}

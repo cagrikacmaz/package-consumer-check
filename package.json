@@ -1,0 +1,72 @@
+{
+  "name": "package-consumer-check",
+  "version": "0.1.0",
+  "description": "A TypeScript library and CLI for testing packed npm packages in clean consumer projects before publishing.",
+  "keywords": [
+    "npm",
+    "package-development",
+    "release-engineering",
+    "consumer-testing",
+    "esm",
+    "commonjs",
+    "typescript",
+    "cli"
+  ],
+  "license": "MIT",
+  "author": "Çağrı Kaçmaz",
+  "type": "module",
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "require": "./dist/index.cjs"
+    }
+  },
+  "bin": {
+    "package-consumer-check": "./dist/cli.js"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE",
+    "CHANGELOG.md"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/cagrikacmaz/package-consumer-check.git"
+  },
+  "bugs": {
+    "url": "https://github.com/cagrikacmaz/package-consumer-check/issues"
+  },
+  "homepage": "https://github.com/cagrikacmaz/package-consumer-check#readme",
+  "scripts": {
+    "build": "tsup",
+    "test": "vitest run",
+    "test:coverage": "vitest run --coverage",
+    "test:integration": "vitest run tests/integration",
+    "test:self-consumer": "node scripts/self-consumer.mjs",
+    "lint": "eslint .",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "typecheck": "tsc --noEmit",
+    "prepublishOnly": "npm run typecheck && npm run lint && npm test && npm run build"
+  },
+  "dependencies": {
+    "typescript": "^5.9.2"
+  },
+  "devDependencies": {
+    "@types/node": "^22.15.0",
+    "@vitest/coverage-v8": "^3.2.4",
+    "eslint": "^9.32.0",
+    "prettier": "^3.6.2",
+    "tsup": "^8.5.0",
+    "typescript-eslint": "^8.39.0",
+    "vitest": "^3.2.4"
+  }
+}
