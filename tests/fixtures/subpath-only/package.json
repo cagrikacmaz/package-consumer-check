@@ -1,0 +1,13 @@
+{
+  "name": "fixture-subpath-only",
+  "version": "1.0.0",
+  "type": "module",
+  "exports": {
+    "./feature": {
+      "import": "./feature.js"
+    }
+  },
+  "files": [
+    "feature.js"
+  ]
+}

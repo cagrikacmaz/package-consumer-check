@@ -1,0 +1,9 @@
+{
+  "name": "fixture-exports-null",
+  "version": "1.0.0",
+  "main": "./index.cjs",
+  "exports": null,
+  "files": [
+    "index.cjs"
+  ]
+}

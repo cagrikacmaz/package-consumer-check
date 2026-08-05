@@ -4,10 +4,26 @@ import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
+const PROCESS_TIMEOUT_MS = 30_000;
+const MAX_OUTPUT_BYTES = 32 * 1024;
+const TRUNCATION_MARKER = "\n… output truncated by self-consumer validation …";
 const repository = resolve(dirname(fileURLToPath(import.meta.url)), "..");
+const repositoryMetadata = JSON.parse(await readFile(join(repository, "package.json"), "utf8"));
+const expectedVersion = repositoryMetadata.version;
 const temporary = await mkdtemp(join(tmpdir(), "package-consumer-check-self-"));
 const packDestination = join(temporary, "pack");
 const consumer = join(temporary, "consumer");
+
+function appendBounded(current, chunk) {
+  if (current.truncated) return current;
+  const remaining = MAX_OUTPUT_BYTES - Buffer.byteLength(current.value);
+  if (chunk.length <= remaining)
+    return { value: current.value + chunk.toString(), truncated: false };
+  return {
+    value: current.value + chunk.subarray(0, Math.max(0, remaining)).toString(),
+    truncated: true,
+  };
+}
 
 function command(executable, args, cwd) {
   return new Promise((resolveCommand, reject) => {
@@ -17,14 +33,29 @@ function command(executable, args, cwd) {
       windowsHide: true,
       stdio: ["ignore", "pipe", "pipe"],
     });
-    let stdout = "";
-    let stderr = "";
-    child.stdout.on("data", (chunk) => (stdout += chunk));
-    child.stderr.on("data", (chunk) => (stderr += chunk));
-    child.on("error", reject);
+    let stdout = { value: "", truncated: false };
+    let stderr = { value: "", truncated: false };
+    let spawnError;
+    let timedOut = false;
+    child.stdout.on("data", (chunk) => (stdout = appendBounded(stdout, chunk)));
+    child.stderr.on("data", (chunk) => (stderr = appendBounded(stderr, chunk)));
+    child.on("error", (error) => (spawnError = error));
+    const timer = setTimeout(() => {
+      timedOut = true;
+      child.kill();
+    }, PROCESS_TIMEOUT_MS);
     child.on("close", (exitCode) => {
-      if (exitCode === 0) resolveCommand({ stdout, stderr });
-      else reject(new Error(stderr || stdout || `${executable} exited with ${exitCode}`));
+      clearTimeout(timer);
+      const stdoutValue = stdout.value + (stdout.truncated ? TRUNCATION_MARKER : "");
+      const stderrValue = stderr.value + (stderr.truncated ? TRUNCATION_MARKER : "");
+      if (!timedOut && spawnError === undefined && exitCode === 0) {
+        resolveCommand({ stdout: stdoutValue, stderr: stderrValue });
+        return;
+      }
+      const reason = timedOut
+        ? `${executable} timed out after ${PROCESS_TIMEOUT_MS}ms`
+        : (spawnError?.message ?? `${executable} exited with ${exitCode}`);
+      reject(new Error([reason, stderrValue, stdoutValue].filter(Boolean).join("\n")));
     });
   });
 }
@@ -41,7 +72,30 @@ function npmArguments(args) {
 
 async function npm(args, cwd) {
   const [executable, commandArgs] = npmArguments(args);
-  return command(executable, commandArgs, cwd);
+  return await command(executable, commandArgs, cwd);
+}
+
+async function installedBinary(args) {
+  const binBase = join(consumer, "node_modules", ".bin", "package-consumer-check");
+  if (process.platform === "win32") {
+    const powershellShim = `${binBase}.ps1`;
+    await access(powershellShim);
+    return await command(
+      "powershell.exe",
+      [
+        "-NoProfile",
+        "-NonInteractive",
+        "-ExecutionPolicy",
+        "Bypass",
+        "-File",
+        powershellShim,
+        ...args,
+      ],
+      consumer,
+    );
+  }
+  await access(binBase);
+  return await command(binBase, args, consumer);
 }
 
 try {
@@ -94,6 +148,10 @@ try {
       "NodeNext",
       "--moduleResolution",
       "NodeNext",
+      "--types",
+      "node",
+      "--typeRoots",
+      join(consumer, "node_modules", "@types"),
       join(consumer, "types.mts"),
     ],
     consumer,
@@ -101,16 +159,15 @@ try {
 
   const installedRoot = join(consumer, "node_modules", "package-consumer-check");
   const installedMetadata = JSON.parse(await readFile(join(installedRoot, "package.json"), "utf8"));
-  if (installedMetadata.version !== "0.1.0") {
+  if (installedMetadata.version !== expectedVersion) {
     throw new Error(
-      `Expected installed version 0.1.0, received ${String(installedMetadata.version)}`,
+      `Expected installed version ${String(expectedVersion)}, received ${String(installedMetadata.version)}`,
     );
   }
-  const cli = join(installedRoot, "dist", "cli.js");
-  const help = await command(process.execPath, [cli, "--help"], consumer);
-  const version = await command(process.execPath, [cli, "--version"], consumer);
-  if (!help.stdout.includes("Usage:") || version.stdout.trim() !== "0.1.0") {
-    throw new Error("Installed CLI help/version validation failed");
+  const help = await installedBinary(["--help"]);
+  const version = await installedBinary(["--version"]);
+  if (!help.stdout.includes("Usage:") || version.stdout.trim() !== expectedVersion) {
+    throw new Error("Installed npm binary help/version validation failed");
   }
 
   process.stdout.write(`Self-consumer validation passed for ${records[0].filename}\n`);

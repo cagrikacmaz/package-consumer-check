@@ -60,6 +60,17 @@ describe("pack failure classification", () => {
     });
   });
 
+  it("classifies a Unix-style spawn ENOENT as npm missing", async () => {
+    runNpmMock.mockResolvedValue(
+      processResult({ exitCode: null, errorCode: "ENOENT", errorMessage: "spawn npm ENOENT" }),
+    );
+    const path = await temporaryDirectory();
+    expect((await packDirectory(path, path, 1000, false)).check).toMatchObject({
+      summary: "npm could not be located",
+      diagnostics: [{ code: "NPM_NOT_FOUND" }],
+    });
+  });
+
   it("reports npm pack timeouts", async () => {
     runNpmMock.mockResolvedValue(processResult({ exitCode: null, timedOut: true }));
     const path = await temporaryDirectory();
@@ -131,6 +142,17 @@ describe("install failure classification", () => {
     expect(await installTarball("fixture.tgz", path, 1000, false)).toMatchObject({
       status: "failed",
       diagnostics: [{ code: "INSTALL_FAILED", message: "install broke" }],
+    });
+  });
+
+  it("classifies install spawn ENOENT as npm missing", async () => {
+    runNpmMock.mockResolvedValue(
+      processResult({ exitCode: null, errorCode: "ENOENT", errorMessage: "spawn npm ENOENT" }),
+    );
+    const path = await temporaryDirectory();
+    expect(await installTarball("fixture.tgz", path, 1000, false)).toMatchObject({
+      summary: "npm could not be located",
+      diagnostics: [{ code: "NPM_NOT_FOUND" }],
     });
   });
 

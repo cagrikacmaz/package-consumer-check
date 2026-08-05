@@ -15,6 +15,7 @@ export interface ProcessResult {
   stdoutTruncated: boolean;
   stderrTruncated: boolean;
   errorMessage?: string;
+  errorCode?: string;
 }
 
 export interface RunProcessOptions {
@@ -35,6 +36,7 @@ export async function runProcess(
   return await new Promise((resolve) => {
     let timedOut = false;
     let errorMessage: string | undefined;
+    let errorCode: string | undefined;
     let settled = false;
     const child = spawn(command, args, {
       cwd: options.cwd,
@@ -46,6 +48,7 @@ export async function runProcess(
     child.stderr.on("data", (chunk: Buffer) => stderr.append(chunk));
     child.on("error", (error) => {
       errorMessage = error.message;
+      errorCode = (error as NodeJS.ErrnoException).code;
     });
     const timer = setTimeout(() => {
       timedOut = true;
@@ -68,6 +71,7 @@ export async function runProcess(
         stdoutTruncated: stdout.truncated,
         stderrTruncated: stderr.truncated,
         ...(errorMessage === undefined ? {} : { errorMessage }),
+        ...(errorCode === undefined ? {} : { errorCode }),
       });
     });
   });
@@ -118,5 +122,6 @@ export function processDetails(result: ProcessResult): Record<string, unknown> {
     stderr: result.stderr,
     stdoutTruncated: result.stdoutTruncated,
     stderrTruncated: result.stderrTruncated,
+    ...(result.errorCode === undefined ? {} : { errorCode: result.errorCode }),
   };
 }

@@ -35,16 +35,21 @@ export async function installTarball(
       ],
     };
   }
-  if (result.exitCode !== 0 || result.timedOut) {
+  if (result.errorCode === "ENOENT" || result.exitCode !== 0 || result.timedOut) {
+    const npmMissing = result.errorCode === "ENOENT";
     return {
       id: "install",
       status: "failed",
-      summary: result.timedOut ? "npm install timed out" : "Tarball installation failed",
+      summary: npmMissing
+        ? "npm could not be located"
+        : result.timedOut
+          ? "npm install timed out"
+          : "Tarball installation failed",
       durationMs: result.durationMs,
       details: processDetails(result),
       diagnostics: [
         {
-          code: result.timedOut ? "TIMEOUT" : "INSTALL_FAILED",
+          code: npmMissing ? "NPM_NOT_FOUND" : result.timedOut ? "TIMEOUT" : "INSTALL_FAILED",
           message:
             result.stderr.trim() || result.errorMessage || "npm install exited unsuccessfully",
           severity: "error",

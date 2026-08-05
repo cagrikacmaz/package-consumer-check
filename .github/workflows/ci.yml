@@ -28,7 +28,21 @@ jobs:
       - run: npm run format:check
       - run: npm test
       - run: npm run build
+      - if: matrix.node-version == 22
+        run: npm run test:self-consumer
       - run: npm pack --dry-run
+
+  coverage:
+    name: Coverage / Node 22 / Ubuntu
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run test:coverage
 
   windows:
     name: Node 22 / Windows integration
@@ -45,4 +59,5 @@ jobs:
       - run: npm run format:check
       - run: npm run test:integration
       - run: npm run build
+      - run: npm run test:self-consumer
       - run: npm pack --dry-run

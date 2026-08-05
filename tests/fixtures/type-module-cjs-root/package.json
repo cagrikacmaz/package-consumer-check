@@ -1,0 +1,9 @@
+{
+  "name": "fixture-type-module-cjs-root",
+  "version": "1.0.0",
+  "type": "module",
+  "exports": "./index.cjs",
+  "files": [
+    "index.cjs"
+  ]
+}

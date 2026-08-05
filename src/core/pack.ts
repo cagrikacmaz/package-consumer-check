@@ -37,17 +37,22 @@ export async function packDirectory(
       },
     };
   }
-  if (result.exitCode !== 0 || result.timedOut) {
+  if (result.errorCode === "ENOENT" || result.exitCode !== 0 || result.timedOut) {
+    const npmMissing = result.errorCode === "ENOENT";
     return {
       check: {
         id: "pack",
         status: "failed",
-        summary: result.timedOut ? "npm pack timed out" : "npm pack failed",
+        summary: npmMissing
+          ? "npm could not be located"
+          : result.timedOut
+            ? "npm pack timed out"
+            : "npm pack failed",
         durationMs: result.durationMs,
         details: processDetails(result),
         diagnostics: [
           {
-            code: result.timedOut ? "TIMEOUT" : "PACK_FAILED",
+            code: npmMissing ? "NPM_NOT_FOUND" : result.timedOut ? "TIMEOUT" : "PACK_FAILED",
             message:
               result.stderr.trim() || result.errorMessage || "npm pack exited unsuccessfully",
             severity: "error",

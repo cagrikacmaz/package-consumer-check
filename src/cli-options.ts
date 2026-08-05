@@ -22,10 +22,10 @@ function positiveInteger(value: string, option: string): number {
   return number;
 }
 
-function nonNegativeInteger(value: string, option: string): number {
+function exitCode(value: string, option: string): number {
   const number = Number(value);
-  if (!Number.isSafeInteger(number) || number < 0) {
-    throw new TypeError(`${option} requires a non-negative integer`);
+  if (!Number.isSafeInteger(number) || number < 0 || number > 255) {
+    throw new TypeError(`${option} requires an integer from 0 to 255`);
   }
   return number;
 }
@@ -82,7 +82,7 @@ export function parseCliArgs(args: string[]): ParsedCliOptions {
         index += 1;
         break;
       case "--accepted-cli-exit-code":
-        acceptedCliExitCodes.push(nonNegativeInteger(nextValue(args, index, arg), arg));
+        acceptedCliExitCodes.push(exitCode(nextValue(args, index, arg), arg));
         index += 1;
         break;
       case "--help":

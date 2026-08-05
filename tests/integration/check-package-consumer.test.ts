@@ -2,11 +2,12 @@ import { access, cp, mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { checkPackageConsumer } from "../../src/core/check-package-consumer.js";
 import { packDirectory } from "../../src/core/pack.js";
 import { cleanupOwnedWorkspaces } from "../../src/core/cleanup.js";
 import { createOwnedWorkspace } from "../../src/core/temp-workspace.js";
+import { runCli } from "../../src/cli.js";
 
 const fixtures = fileURLToPath(new URL("../fixtures", import.meta.url));
 const externallyOwned: string[] = [];
@@ -66,6 +67,9 @@ describe("real package consumer checks", () => {
     expect(
       result.checks.find((check) => check.id === "typescript")?.diagnostics?.[0]?.code,
     ).toMatch(/^TS/);
+    expect(
+      result.checks.find((check) => check.id === "typescript")?.diagnostics?.[0]?.source,
+    ).toMatch(/^<temporary-consumer>\//);
   });
 
   it("fails a missing packed root export", async () => {
@@ -81,6 +85,73 @@ describe("real package consumer checks", () => {
     expect(result.checks.find((check) => check.id === "cli")?.diagnostics).toContainEqual(
       expect.objectContaining({ code: "CLI_TARGET_MISSING" }),
     );
+  });
+
+  it("returns a structured failure and cleans up for a directory bin target", async () => {
+    const result = await checkPackageConsumer(fixture("bin-target-directory"), options);
+    expect(result.passed).toBe(false);
+    expect(status(result, "cli")).toBe("failed");
+    expect(result.checks.find((check) => check.id === "cli")?.diagnostics).toContainEqual(
+      expect.objectContaining({ code: "CLI_TARGET_NOT_FILE" }),
+    );
+    const cleanup = result.checks.find((check) => check.id === "cleanup");
+    expect(cleanup?.status).toBe("passed");
+    const removedPaths = Array.isArray(cleanup?.details?.removed)
+      ? cleanup.details.removed.filter((value): value is string => typeof value === "string")
+      : [];
+    expect(removedPaths).toHaveLength(2);
+    for (const path of removedPaths) await expect(access(path)).rejects.toThrow();
+
+    const stdout = vi.spyOn(process.stdout, "write").mockImplementation(() => true);
+    try {
+      expect(await runCli([fixture("bin-target-directory"), "--format", "json"])).toBe(1);
+    } finally {
+      stdout.mockRestore();
+    }
+  });
+
+  it("passes a subpath-only package with root checks skipped", async () => {
+    const result = await checkPackageConsumer(fixture("subpath-only"), options);
+    expect(result.passed).toBe(true);
+    expect([
+      status(result, "esm-import"),
+      status(result, "commonjs-require"),
+      status(result, "typescript"),
+    ]).toEqual(["skipped", "skipped", "skipped"]);
+    expect(result.checks.find((check) => check.id === "esm-import")?.reason).toBe(
+      "Package does not export a root entry point",
+    );
+    expect(status(result, "cleanup")).toBe("passed");
+  });
+
+  it("passes a package whose root export is null", async () => {
+    const result = await checkPackageConsumer(fixture("exports-null"), options);
+    expect(result.passed).toBe(true);
+    expect(status(result, "esm-import")).toBe("skipped");
+    expect(status(result, "commonjs-require")).toBe("skipped");
+  });
+
+  it("imports and requires a cjs root under type module", async () => {
+    const result = await checkPackageConsumer(fixture("type-module-cjs-root"), options);
+    expect(result.passed).toBe(true);
+    expect(status(result, "esm-import")).toBe("passed");
+    expect(status(result, "commonjs-require")).toBe("passed");
+  });
+
+  it("imports and requires a legacy CommonJS root", async () => {
+    const result = await checkPackageConsumer(fixture("legacy-cjs-root"), options);
+    expect(result.passed).toBe(true);
+    expect(status(result, "esm-import")).toBe("passed");
+    expect(status(result, "commonjs-require")).toBe("passed");
+  });
+
+  it("accepts Node globals in advertised declarations", async () => {
+    const result = await checkPackageConsumer(fixture("node-types-good"), options);
+    expect(result.passed).toBe(true);
+    expect(status(result, "typescript")).toBe("passed");
+    expect(result.checks.find((check) => check.id === "typescript")?.details).toMatchObject({
+      typeBaseline: "@types/node",
+    });
   });
 
   it("resolves and imports a scoped package", async () => {
@@ -168,5 +239,17 @@ describe("real package consumer checks", () => {
     await cp(fixture("dual-good"), copied, { recursive: true });
     const result = await checkPackageConsumer(copied, options);
     expect(result.passed).toBe(true);
+  });
+
+  it("handles source paths containing Turkish Unicode characters", async () => {
+    const root = await mkdtemp(join(tmpdir(), "pcc-unicode-"));
+    externallyOwned.push(root);
+    const copied = join(root, "Çağrı paket");
+    await cp(fixture("dual-good"), copied, { recursive: true });
+    const result = await checkPackageConsumer(copied, options);
+    expect(result.passed).toBe(true);
+    expect(status(result, "pack")).toBe("passed");
+    expect(status(result, "install")).toBe("passed");
+    expect(status(result, "cleanup")).toBe("passed");
   });
 });

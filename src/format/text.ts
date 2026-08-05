@@ -1,8 +1,9 @@
 import type { ConsumerCheckResult } from "../types.js";
+import { PACKAGE_VERSION } from "../version.js";
 
 export function formatTextResult(result: ConsumerCheckResult): string {
   const lines = [
-    "package-consumer-check 0.1.0",
+    `package-consumer-check ${PACKAGE_VERSION}`,
     "",
     `Target: ${result.target.packageName === undefined ? result.target.resolvedPath : `${result.target.packageName}@${result.target.version ?? "unknown"}`}`,
     "",

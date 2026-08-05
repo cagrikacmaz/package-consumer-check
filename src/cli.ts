@@ -5,10 +5,9 @@ import { asPackageConsumerCheckError } from "./errors.js";
 import { formatJsonResult } from "./format/json.js";
 import { formatTextResult } from "./format/text.js";
 import { parseCliArgs } from "./cli-options.js";
+import { PACKAGE_VERSION } from "./version.js";
 
-const VERSION = "0.1.0";
-
-export const HELP = `package-consumer-check ${VERSION}
+export const HELP = `package-consumer-check ${PACKAGE_VERSION}
 
 Test a packed npm package from clean ESM, CommonJS, TypeScript, and CLI consumers.
 
@@ -29,7 +28,7 @@ Options:
   --skip-types                      Skip the TypeScript declaration check
   --skip-cli                        Skip installed CLI execution
   --cli-arg <value>                 CLI argument; repeatable; default --help
-  --accepted-cli-exit-code <number> Accepted CLI exit code; repeatable; default 0
+  --accepted-cli-exit-code <number> Accepted CLI exit code (0-255); repeatable; default 0
   --help                            Show help
   --version                         Show version
 
@@ -48,7 +47,7 @@ export async function runCli(args: string[]): Promise<number> {
       return 0;
     }
     if (parsed.version) {
-      process.stdout.write(`${VERSION}\n`);
+      process.stdout.write(`${PACKAGE_VERSION}\n`);
       return 0;
     }
     const result = await checkPackageConsumer(parsed.target, parsed.checkOptions);

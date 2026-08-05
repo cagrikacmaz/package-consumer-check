@@ -73,7 +73,21 @@ describe("parseCliArgs", () => {
   });
 
   it("rejects negative accepted exit codes", () => {
-    expect(() => parseCliArgs(["--accepted-cli-exit-code", "-1"])).toThrow("non-negative integer");
+    expect(() => parseCliArgs(["--accepted-cli-exit-code", "-1"])).toThrow("0 to 255");
+  });
+
+  it("accepts the maximum process exit code", () => {
+    expect(
+      parseCliArgs(["--accepted-cli-exit-code", "255"]).checkOptions.acceptedCliExitCodes,
+    ).toEqual([255]);
+  });
+
+  it("rejects exit codes above 255", () => {
+    expect(() => parseCliArgs(["--accepted-cli-exit-code", "256"])).toThrow("0 to 255");
+  });
+
+  it("rejects non-integer exit codes", () => {
+    expect(() => parseCliArgs(["--accepted-cli-exit-code", "1.5"])).toThrow("0 to 255");
   });
 
   it("reads help aliases", () => {

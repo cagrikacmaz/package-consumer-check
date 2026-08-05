@@ -18,6 +18,7 @@ import { runEsmCheck } from "../checks/esm-check.js";
 import { runCommonJsCheck } from "../checks/commonjs-check.js";
 import { runTypeScriptCheck } from "../checks/typescript-check.js";
 import { runCliCheck } from "../checks/cli-check.js";
+import { PackageConsumerCheckError } from "../errors.js";
 
 const DEFAULT_TIMEOUT_MS = 10_000;
 
@@ -60,166 +61,205 @@ export async function checkPackageConsumer(
   let packWorkspace: OwnedWorkspace | undefined;
   let consumerWorkspace: OwnedWorkspace | undefined;
   let tarballPath: string | undefined;
+  let executionFailed = false;
+  let executionError: unknown;
 
-  if (target.kind === "directory") {
-    const started = performance.now();
-    const metadata = await readPackageMetadata(join(target.resolvedPath, "package.json"));
-    expected = validatePackageIdentity(metadata);
-    checks.push({
-      id: "target-metadata",
-      status: "passed",
-      summary: `Read source metadata for ${expected.name}@${expected.version}`,
-      durationMs: Math.round(performance.now() - started),
-    });
-    packWorkspace = await createOwnedWorkspace("pack");
-    const packed = await packDirectory(
-      target.resolvedPath,
-      packWorkspace.path,
-      timeoutMs,
-      options.allowScripts ?? false,
-    );
-    checks.push(packed.check);
-    tarballPath = packed.tarballPath;
-  } else {
-    checks.push(
-      skipped("target-metadata", "Source metadata is unavailable for a supplied tarball"),
-    );
-    checks.push(skipped("pack", "The user supplied a tarball"));
-    tarballPath = target.resolvedPath;
-  }
-
-  if (tarballPath === undefined) {
-    checks.push(skipped("install", "Packing did not produce an installable tarball"));
-  } else {
-    try {
-      consumerWorkspace = await createOwnedWorkspace("consumer");
-      checks.push(
-        await installTarball(
-          tarballPath,
-          consumerWorkspace.path,
-          timeoutMs,
-          options.allowScripts ?? false,
-        ),
-      );
-    } catch (error) {
-      checks.push(failedFromError("install", "Could not prepare the consumer installation", error));
-    }
-  }
-
-  const installPassed = checks.find((check) => check.id === "install")?.status === "passed";
-  if (!installPassed || consumerWorkspace === undefined) {
-    checks.push(skipped("installed-metadata", "The package was not installed successfully"));
-  } else {
-    const started = performance.now();
-    try {
-      installed = await discoverInstalledPackage(consumerWorkspace.path, expected);
-      const mismatches: string[] = [];
-      if (expected !== undefined && installed.name !== expected.name) {
-        mismatches.push(`expected name ${expected.name}, installed ${installed.name}`);
-      }
-      if (expected !== undefined && installed.version !== expected.version) {
-        mismatches.push(`expected version ${expected.version}, installed ${installed.version}`);
-      }
+  try {
+    if (target.kind === "directory") {
+      const started = performance.now();
+      const metadata = await readPackageMetadata(join(target.resolvedPath, "package.json"));
+      expected = validatePackageIdentity(metadata);
       checks.push({
-        id: "installed-metadata",
-        status: mismatches.length === 0 ? "passed" : "failed",
-        summary:
-          mismatches.length === 0
-            ? `Verified installed metadata for ${installed.name}@${installed.version}`
-            : "Installed package identity does not match source metadata",
+        id: "target-metadata",
+        status: "passed",
+        summary: `Read source metadata for ${expected.name}@${expected.version}`,
         durationMs: Math.round(performance.now() - started),
-        ...(mismatches.length === 0
-          ? {}
-          : {
-              diagnostics: mismatches.map((message) => ({
-                code: "INSTALLED_METADATA_MISMATCH",
-                message,
-                severity: "error" as const,
-              })),
-            }),
       });
-    } catch (error) {
-      checks.push(
-        failedFromError("installed-metadata", "Installed metadata could not be read", error),
+      packWorkspace = await createOwnedWorkspace("pack");
+      const packed = await packDirectory(
+        target.resolvedPath,
+        packWorkspace.path,
+        timeoutMs,
+        options.allowScripts ?? false,
       );
-    }
-  }
-
-  const metadataPassed =
-    checks.find((check) => check.id === "installed-metadata")?.status === "passed";
-  if (!metadataPassed || installed === undefined || consumerWorkspace === undefined) {
-    const reason = "Installed package metadata is unavailable";
-    checks.push(skipped("esm-import", reason));
-    checks.push(skipped("commonjs-require", reason));
-    checks.push(skipped("typescript", reason));
-    checks.push(skipped("cli", reason));
-  } else {
-    const plan = planCapabilities(installed.metadata);
-    warnings.push(...plan.warnings);
-
-    if (options.skipEsm) {
-      checks.push(skipped("esm-import", "Skipped by --skip-esm"));
-    } else if (!plan.esm.run) {
-      checks.push(skipped("esm-import", plan.esm.reason));
-    } else {
-      checks.push(await runEsmCheck(consumerWorkspace.path, installed.name, timeoutMs));
-    }
-
-    if (options.skipCommonJs) {
-      checks.push(skipped("commonjs-require", "Skipped by --skip-cjs"));
-    } else if (!plan.commonJs.run) {
-      checks.push(skipped("commonjs-require", plan.commonJs.reason));
-    } else {
-      checks.push(await runCommonJsCheck(consumerWorkspace.path, installed.name, timeoutMs));
-    }
-
-    if (options.skipTypes) {
-      checks.push(skipped("typescript", "Skipped by --skip-types"));
-    } else if (!plan.typescript.run && options.requireTypes) {
-      checks.push({
-        id: "typescript",
-        status: "failed",
-        summary: "Type declarations are required but not advertised",
-        durationMs: 0,
-        diagnostics: [
-          {
-            code: "TYPES_REQUIRED",
-            message: plan.typescript.reason,
-            severity: "error",
-          },
-        ],
-      });
-    } else if (!plan.typescript.run) {
-      checks.push(skipped("typescript", plan.typescript.reason));
-    } else {
-      checks.push(await runTypeScriptCheck(consumerWorkspace.path, installed.name));
-    }
-
-    if (options.skipCli) {
-      checks.push(skipped("cli", "Skipped by --skip-cli"));
-    } else if (!plan.cli.run) {
-      checks.push(skipped("cli", plan.cli.reason));
+      checks.push(packed.check);
+      tarballPath = packed.tarballPath;
     } else {
       checks.push(
-        await runCliCheck(
-          consumerWorkspace.path,
-          installed.path,
-          plan.bins,
-          timeoutMs,
-          options.cliArgs?.length ? options.cliArgs : ["--help"],
-          options.acceptedCliExitCodes?.length ? options.acceptedCliExitCodes : [0],
-        ),
+        skipped("target-metadata", "Source metadata is unavailable for a supplied tarball"),
       );
+      checks.push(skipped("pack", "The user supplied a tarball"));
+      tarballPath = target.resolvedPath;
     }
+
+    if (tarballPath === undefined) {
+      checks.push(skipped("install", "Packing did not produce an installable tarball"));
+    } else {
+      try {
+        consumerWorkspace = await createOwnedWorkspace("consumer");
+        checks.push(
+          await installTarball(
+            tarballPath,
+            consumerWorkspace.path,
+            timeoutMs,
+            options.allowScripts ?? false,
+          ),
+        );
+      } catch (error) {
+        checks.push(
+          failedFromError("install", "Could not prepare the consumer installation", error),
+        );
+      }
+    }
+
+    const installPassed = checks.find((check) => check.id === "install")?.status === "passed";
+    if (!installPassed || consumerWorkspace === undefined) {
+      checks.push(skipped("installed-metadata", "The package was not installed successfully"));
+    } else {
+      const started = performance.now();
+      try {
+        installed = await discoverInstalledPackage(consumerWorkspace.path, expected);
+        const mismatches: string[] = [];
+        if (expected !== undefined && installed.name !== expected.name) {
+          mismatches.push(`expected name ${expected.name}, installed ${installed.name}`);
+        }
+        if (expected !== undefined && installed.version !== expected.version) {
+          mismatches.push(`expected version ${expected.version}, installed ${installed.version}`);
+        }
+        checks.push({
+          id: "installed-metadata",
+          status: mismatches.length === 0 ? "passed" : "failed",
+          summary:
+            mismatches.length === 0
+              ? `Verified installed metadata for ${installed.name}@${installed.version}`
+              : "Installed package identity does not match source metadata",
+          durationMs: Math.round(performance.now() - started),
+          ...(mismatches.length === 0
+            ? {}
+            : {
+                diagnostics: mismatches.map((message) => ({
+                  code: "INSTALLED_METADATA_MISMATCH",
+                  message,
+                  severity: "error" as const,
+                })),
+              }),
+        });
+      } catch (error) {
+        checks.push(
+          failedFromError("installed-metadata", "Installed metadata could not be read", error),
+        );
+      }
+    }
+
+    const metadataPassed =
+      checks.find((check) => check.id === "installed-metadata")?.status === "passed";
+    if (!metadataPassed || installed === undefined || consumerWorkspace === undefined) {
+      const reason = "Installed package metadata is unavailable";
+      checks.push(skipped("esm-import", reason));
+      checks.push(skipped("commonjs-require", reason));
+      checks.push(skipped("typescript", reason));
+      checks.push(skipped("cli", reason));
+    } else {
+      const plan = planCapabilities(installed.metadata);
+      warnings.push(...plan.warnings);
+
+      if (options.skipEsm) {
+        checks.push(skipped("esm-import", "Skipped by --skip-esm"));
+      } else if (!plan.esm.run) {
+        checks.push(skipped("esm-import", plan.esm.reason));
+      } else {
+        checks.push(await runEsmCheck(consumerWorkspace.path, installed.name, timeoutMs));
+      }
+
+      if (options.skipCommonJs) {
+        checks.push(skipped("commonjs-require", "Skipped by --skip-cjs"));
+      } else if (!plan.commonJs.run) {
+        checks.push(skipped("commonjs-require", plan.commonJs.reason));
+      } else {
+        checks.push(await runCommonJsCheck(consumerWorkspace.path, installed.name, timeoutMs));
+      }
+
+      if (options.skipTypes) {
+        checks.push(skipped("typescript", "Skipped by --skip-types"));
+      } else if (!plan.typescript.run && options.requireTypes) {
+        checks.push({
+          id: "typescript",
+          status: "failed",
+          summary: "Type declarations are required but not advertised",
+          durationMs: 0,
+          diagnostics: [
+            {
+              code: "TYPES_REQUIRED",
+              message: plan.typescript.reason,
+              severity: "error",
+            },
+          ],
+        });
+      } else if (!plan.typescript.run) {
+        checks.push(skipped("typescript", plan.typescript.reason));
+      } else {
+        checks.push(await runTypeScriptCheck(consumerWorkspace.path, installed.name));
+      }
+
+      if (options.skipCli) {
+        checks.push(skipped("cli", "Skipped by --skip-cli"));
+      } else if (!plan.cli.run) {
+        checks.push(skipped("cli", plan.cli.reason));
+      } else {
+        checks.push(
+          await runCliCheck(
+            consumerWorkspace.path,
+            installed.path,
+            plan.bins,
+            timeoutMs,
+            options.cliArgs?.length ? options.cliArgs : ["--help"],
+            options.acceptedCliExitCodes?.length ? options.acceptedCliExitCodes : [0],
+          ),
+        );
+      }
+    }
+  } catch (error) {
+    executionFailed = true;
+    executionError = error;
   }
 
-  checks.push(
-    await cleanupOwnedWorkspaces({
+  let cleanupCheck: ConsumerCheck;
+  try {
+    cleanupCheck = await cleanupOwnedWorkspaces({
       ...(packWorkspace === undefined ? {} : { packWorkspace }),
       ...(consumerWorkspace === undefined ? {} : { consumerWorkspace }),
       keepTemp,
-    }),
-  );
+    });
+  } catch (error) {
+    cleanupCheck = {
+      id: "cleanup",
+      status: "failed",
+      summary: "Cleanup failed unexpectedly",
+      durationMs: 0,
+      diagnostics: [
+        {
+          code: "CLEANUP_FAILED",
+          message: error instanceof Error ? error.message : String(error),
+          severity: "error",
+          source: "cleanup",
+        },
+      ],
+    };
+  }
+
+  if (executionFailed) {
+    if (cleanupCheck.status === "failed") {
+      const cleanupError = new PackageConsumerCheckError("CLEANUP_FAILED", cleanupCheck.summary, {
+        diagnostics: cleanupCheck.diagnostics ?? [],
+      });
+      throw new AggregateError(
+        [executionError, cleanupError],
+        `Consumer checking failed: ${executionError instanceof Error ? executionError.message : String(executionError)}; temporary-resource cleanup also failed: ${cleanupCheck.summary}`,
+      );
+    }
+    throw executionError;
+  }
+  checks.push(cleanupCheck);
 
   const identity = installed ?? expected;
   return {

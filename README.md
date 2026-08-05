@@ -91,7 +91,7 @@ package-consumer-check [target] [options]
 --skip-types                      Skip the TypeScript declaration check
 --skip-cli                        Skip installed CLI execution
 --cli-arg <value>                 CLI argument; repeatable; default --help
---accepted-cli-exit-code <number> Accepted CLI exit code; repeatable; default 0
+--accepted-cli-exit-code <number> Accepted CLI exit code (0-255); repeatable; default 0
 --help
 --version
 ```
@@ -120,9 +120,15 @@ Public exports are `checkPackageConsumer`, `PackageConsumerCheckError`, `Consume
 
 ## Automatic capability detection
 
-The planner reads the installed package's `type`, `main`, `module`, `exports`, `types`, `typings`, and
-`bin` fields. It understands root string exports and common `import`, `require`, `default`, and `types`
-conditions, plus `.mjs`, `.cjs`, `.d.ts`, `.d.mts`, and `.d.cts` conventions.
+The planner reads the installed package's Node-relevant `type`, `main`, `exports`, `types`, `typings`,
+and `bin` fields. It understands root string exports and common `import`, `require`, `default`, and
+`types` conditions, plus `.mjs`, `.cjs`, `.d.ts`, `.d.mts`, and `.d.cts` conventions. The bundler
+convention `module` is observed only to explain that Node.js does not use it for package-root
+resolution.
+
+An `exports` map with subpaths but no `"."` does not export the package root. Root ESM, CommonJS, and
+TypeScript checks are skipped in that case; v0.1 does not treat an intentionally subpath-only package
+as broken.
 
 The planner is intentionally conservative; it does not reproduce every Node.js export-resolution
 rule. Ambiguous metadata generates a warning and a plausible smoke test. Explicit skip flags always
@@ -144,8 +150,11 @@ own version-specific script policy and configuration still apply. See npm's docu
 [lifecycle ordering](https://docs.npmjs.com/cli/using-npm/scripts/).
 
 Subprocesses use argument arrays with shell execution disabled, enforce timeouts, and cap captured
-stdout and stderr at 32 KiB each. No environment dump, npm credentials, or auth configuration is
-included in results.
+stdout and stderr at 32 KiB each. Package code inherits the current process environment. Captured
+output is bounded but not secret-redacted, so avoid testing untrusted code in an environment that
+contains credentials it could read or print. No environment dump, npm credentials, or auth
+configuration is added to results by the tool itself. A timeout terminates the direct child process;
+termination of every descendant process cannot be guaranteed on every operating system.
 
 ## Exit codes
 
@@ -180,8 +189,9 @@ resolution in greater depth. Use them alongside dynamic consumer checks when app
 - Local directories and local `.tgz` files only; no registry names or remote URLs
 - Root package entry point only; subpath exports are not exhaustively tested
 - No complete implementation of Node.js export conditions
-- CLI execution is limited to Node.js scripts, not arbitrary native executables
-- TypeScript is checked with one defined NodeNext consumer configuration
+- CLI execution is limited to Node.js scripts; unsupported native binaries are skipped, not called broken
+- TypeScript is checked with the package's runtime TypeScript dependency, one NodeNext configuration,
+  and its deterministic runtime `@types/node` baseline
 - Lifecycle-script suppression depends on the installed npm version's behavior
 - Package code still executes during runtime checks even when lifecycle scripts are suppressed
 - Native addon ABI compatibility is not tested

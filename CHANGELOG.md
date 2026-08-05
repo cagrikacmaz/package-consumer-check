@@ -14,3 +14,7 @@ uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Structured library results and text/JSON CLI output
 - Bounded subprocess diagnostics, timeouts, and ownership-aware cleanup
 - Cross-platform unit and integration coverage
+- Conservative root-export capability planning, including subpath-only and blocked roots
+- Deterministic Node declaration checks using the runtime `@types/node` baseline
+- Guaranteed owned-workspace cleanup after unexpected consumer-check failures
+- Hardened CLI target inspection and installed npm-bin self-validation

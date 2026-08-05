@@ -23,8 +23,12 @@ describe("planCapabilities", () => {
     expect(plan.esm).toMatchObject({ run: false });
   });
 
-  it("uses the package module field as ESM evidence", () => {
-    expect(planCapabilities({ module: "./index.js" }).esm.run).toBe(true);
+  it("does not treat the module field as Node resolution metadata", () => {
+    const plan = planCapabilities({ module: "./bundler.js", main: "./index.cjs" });
+    expect(plan.commonJs.run).toBe(true);
+    expect(plan.warnings).toContain(
+      "The module field is not used for Node.js package-root resolution.",
+    );
   });
 
   it("uses type module as ESM evidence", () => {
@@ -37,17 +41,16 @@ describe("planCapabilities", () => {
 
   it("uses a cjs main as CommonJS evidence", () => {
     const plan = planCapabilities({ main: "./index.cjs" });
-    expect([plan.esm.run, plan.commonJs.run]).toEqual([false, true]);
+    expect([plan.esm.run, plan.commonJs.run]).toEqual([true, true]);
   });
 
   it("infers CommonJS for legacy packages", () => {
     expect(planCapabilities({ main: "./index.js" }).commonJs.run).toBe(true);
   });
 
-  it("warns when ESM capability is ambiguous", () => {
-    expect(planCapabilities({ main: "./index.js" }).warnings).toContainEqual(
-      expect.stringContaining("ESM support is ambiguous"),
-    );
+  it("runs both modes for a default CommonJS js target", () => {
+    const plan = planCapabilities({ main: "./index.js" });
+    expect([plan.esm.run, plan.commonJs.run]).toEqual([true, true]);
   });
 
   it("detects top-level types", () => {
@@ -94,5 +97,74 @@ describe("planCapabilities", () => {
   it("honors a default export target", () => {
     const plan = planCapabilities({ type: "module", exports: { ".": { default: "./index.js" } } });
     expect(plan.esm.run).toBe(true);
+  });
+
+  it("skips root checks for a subpath-only exports map", () => {
+    const plan = planCapabilities({
+      type: "module",
+      main: "./ignored.js",
+      exports: { "./feature": { import: "./feature.js", types: "./feature.d.ts" } },
+    });
+    expect(plan.esm).toMatchObject({
+      run: false,
+      reason: "Package does not export a root entry point",
+    });
+    expect(plan.commonJs.run).toBe(false);
+    expect(plan.typescript.run).toBe(false);
+  });
+
+  it("skips root checks when exports is null", () => {
+    const plan = planCapabilities({ exports: null, main: "./ignored.cjs" });
+    expect([plan.esm.run, plan.commonJs.run, plan.typescript.run]).toEqual([false, false, false]);
+  });
+
+  it("skips root checks when the dot export is null", () => {
+    const plan = planCapabilities({
+      exports: { ".": null, "./feature": { import: "./feature.js" } },
+    });
+    expect(plan.esm.reason).toBe("Package does not export a root entry point");
+    expect(plan.commonJs.run).toBe(false);
+  });
+
+  it("uses only the dot export when root and subpaths coexist", () => {
+    const plan = planCapabilities({
+      type: "module",
+      exports: {
+        ".": { import: "./index.js" },
+        "./feature": { require: "./feature.cjs", types: "./feature.d.ts" },
+      },
+    });
+    expect([plan.esm.run, plan.commonJs.run, plan.typescript.run]).toEqual([true, false, false]);
+  });
+
+  it("runs both modes for cjs under type module", () => {
+    const plan = planCapabilities({ type: "module", exports: "./index.cjs" });
+    expect([plan.esm.run, plan.commonJs.run]).toEqual([true, true]);
+  });
+
+  it("runs both modes for a default cjs export", () => {
+    const plan = planCapabilities({
+      type: "module",
+      exports: { ".": { default: "./index.cjs" } },
+    });
+    expect([plan.esm.run, plan.commonJs.run]).toEqual([true, true]);
+  });
+
+  it("skips CommonJS for an mjs root", () => {
+    const plan = planCapabilities({ exports: "./index.mjs" });
+    expect([plan.esm.run, plan.commonJs.run]).toEqual([true, false]);
+  });
+
+  it("skips CommonJS for js under type module", () => {
+    const plan = planCapabilities({ type: "module", exports: "./index.js" });
+    expect([plan.esm.run, plan.commonJs.run]).toEqual([true, false]);
+  });
+
+  it("honors explicit require even when its target is mjs", () => {
+    const plan = planCapabilities({
+      type: "module",
+      exports: { ".": { require: "./advertised.mjs" } },
+    });
+    expect(plan.commonJs.run).toBe(true);
   });
 });

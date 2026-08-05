@@ -142,6 +142,14 @@ describe("process runner", () => {
     expect(result.stdout).toContain("abc");
     expect(result.stdout).toContain("truncated");
   });
+
+  it("preserves a spawn ENOENT code", async () => {
+    const result = await runProcess("package-consumer-check-command-that-does-not-exist", [], {
+      cwd: process.cwd(),
+      timeoutMs: 2_000,
+    });
+    expect(result.errorCode).toBe("ENOENT");
+  });
 });
 
 describe("owned workspace cleanup", () => {

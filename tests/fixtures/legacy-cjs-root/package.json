@@ -1,0 +1,8 @@
+{
+  "name": "fixture-legacy-cjs-root",
+  "version": "1.0.0",
+  "main": "./index.cjs",
+  "files": [
+    "index.cjs"
+  ]
+}

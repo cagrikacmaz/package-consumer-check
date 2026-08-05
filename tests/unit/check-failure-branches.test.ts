@@ -46,7 +46,7 @@ describe("consumer failure branches", () => {
     );
   });
 
-  it("rejects a non-Node bin target", async () => {
+  it("skips a non-Node bin target without calling the package broken", async () => {
     const consumer = await workspace();
     const packageDirectory = join(consumer, "node_modules", "fixture");
     await mkdir(packageDirectory, { recursive: true });
@@ -62,6 +62,7 @@ describe("consumer failure branches", () => {
     expect(check.diagnostics).toContainEqual(
       expect.objectContaining({ code: "CLI_TARGET_UNSUPPORTED" }),
     );
+    expect(check.status).toBe("skipped");
   });
 
   it("accepts an extensionless Node shebang script", async () => {

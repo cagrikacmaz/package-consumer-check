@@ -1,0 +1,12 @@
+{
+  "name": "fixture-bin-target-directory",
+  "version": "1.0.0",
+  "main": "./index.cjs",
+  "bin": {
+    "directory-bin": "./bin"
+  },
+  "files": [
+    "index.cjs",
+    "bin"
+  ]
+}
