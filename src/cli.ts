@@ -1,5 +1,6 @@
 import { pathToFileURL } from "node:url";
 import { resolve } from "node:path";
+import { realpathSync } from "node:fs";
 import { checkPackageConsumer } from "./core/check-package-consumer.js";
 import { asPackageConsumerCheckError } from "./errors.js";
 import { formatJsonResult } from "./format/json.js";
@@ -68,6 +69,17 @@ export async function runCli(args: string[]): Promise<number> {
 }
 
 const invokedPath = process.argv[1];
-if (invokedPath !== undefined && import.meta.url === pathToFileURL(resolve(invokedPath)).href) {
+let isDirectInvocation = false;
+if (invokedPath !== undefined) {
+  try {
+    const invokedUrl = pathToFileURL(realpathSync(resolve(invokedPath))).href;
+    const moduleUrl = pathToFileURL(realpathSync(new URL(import.meta.url))).href;
+    isDirectInvocation = invokedUrl === moduleUrl;
+  } catch {
+    // A missing or inaccessible argv entry cannot be this module.
+  }
+}
+
+if (isDirectInvocation) {
   process.exitCode = await runCli(process.argv.slice(2));
 }
