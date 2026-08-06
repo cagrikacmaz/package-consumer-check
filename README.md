@@ -1,6 +1,7 @@
 # package-consumer-check
 
 [![CI](https://github.com/cagrikacmaz/package-consumer-check/actions/workflows/ci.yml/badge.svg)](https://github.com/cagrikacmaz/package-consumer-check/actions/workflows/ci.yml)
+[![npm version](https://img.shields.io/npm/v/package-consumer-check.svg)](https://www.npmjs.com/package/package-consumer-check)
 
 Test a packed npm package from clean ESM, CommonJS, TypeScript, and CLI consumers before publishing.
 
